@@ -1,0 +1,322 @@
+<apex:page standardController="Account" extensions="NearbyAccountsViewer" id="the-page">
+    <head>
+       <!-- <meta name="viewport" content="initial-scale=1.0, user-scalable=no"/>  -->
+        <meta charset="utf-8"/>
+        <style>
+          html, body, #map-canvas {
+            height: 100%;
+            margin: 0px;
+            padding: 0px
+          }
+          
+          #map-canvas {
+              height: 200px;
+              width: 100%;
+          }
+
+          .btn-active {
+            background-position:right -60px !important;
+            border-color:#585858 !important;
+            border-bottom-color:#939393 !important;
+          }
+        </style>
+        <apex:includeScript value="https://maps.googleapis.com/maps/api/js?v=3.exp"/>
+      <!--  <apex:includeScript value="{!URLFOR($Resource.AccountAndContactMapsJs)}"/>  -->
+        <script>
+            // Geocoder and Map Options
+            geocoder = new google.maps.Geocoder();
+            
+            // Addresses
+            var Address = function(addressType, id, name, street, city, state, zipCode, latitude, longitude){
+                this.addressType = addressType;
+                this.id = id;
+                this.name = name;
+                this.street = street;
+                this.city = city;
+                this.state = state;
+                this.zipCode = zipCode;
+                var lat = Number(latitude);
+                var lng = Number(longitude);
+                /*
+                console.log('------------- new ' + addressType + ' Address ---------------');
+                console.log('latitidue: ' + latitude);
+                console.log('longitude: ' + longitude);
+                console.log('lat: ' + lat);
+                console.log('lng: ' + lng);
+				*/
+                if(!isNaN(lat) && !isNaN(lng) && !(lat == 0 && lng == 0))
+                    this.latLng = new google.maps.LatLng(lat, lng);
+            }
+            
+            Address.prototype.getAddress = function(){
+                var a = '';
+                a += (this.street) ? this.street + ',' : '';
+                a += (this.city) ? ' ' + this.city + ',' : '';
+                a += (this.state) ? ' ' + this.state : '';
+                a = a.substr(a.length - 1) == ',' ? a.substr(0, a.length - 1) : a;
+                a += (this.zipCode) ? ' ' + this.zipCode : '';
+                return a;
+            }
+            
+            Address.prototype.getName = function(){
+                return this.name;
+            }
+            
+            Address.prototype.setLatLng = function(latLng){
+                this.latLng = latLng;
+            }
+            
+            Address.prototype.getIsValidAddress = function(){
+                return (this.getAddress()) ? true : false;
+            }
+            
+            Address.prototype.getIsValid = function(){
+                return (this.latLng) ? true : false;
+            }
+            
+            Address.prototype.getLatLng = function(){
+                return this.latLng;
+            }
+            
+            var addresses = {
+                add: function(addressType, id, name, street, city, state, postalCode, latitude, longitude){
+                    this[addressType] = new Address(
+                        addressType, id, name, street, city, state, postalCode, latitude, longitude
+                    );
+                }
+            };
+            
+            var zoomMap = {};
+            zoomMap['10'] = 12;
+            zoomMap['20'] = 10;
+            zoomMap['50'] = 8;
+            zoomMap['100'] = 6;
+
+            function setMap(addressType){
+                removeAllActiveClass();
+                hideAllAddressPanels();
+                var address = addresses[addressType];
+                var setMapResult = false;
+                if(address.getIsValid()){
+                    addActiveClass(addressType);
+                    console.log('LatLng found');
+                    var mapOptions = {
+                        zoom: zoomMap['{!distance}'],
+                        center: address.getLatLng()
+                    };
+                    map = new google.maps.Map(document.getElementById('map-canvas'), mapOptions);
+                    var infoWindow = new google.maps.InfoWindow({
+                        content: '<div id="content"><div id="siteNotice"></div><h1>' + address.getName() + '</h1><p>' + addressType + ' Address: ' + address.getAddress() + '</p></div>'
+                    });
+
+                    var marker = new google.maps.Marker({
+                        map: map,
+                        position: address.getLatLng(),
+                        title: address.getName(),
+                        icon: 'http://maps.google.com/mapfiles/ms/icons/green-dot.png'
+                    });
+
+                    google.maps.event.addListener(marker, 'click', function(){
+                        infoWindow.open(map, marker);
+                    });
+
+                    var nearbyAccountListJson = addressType === 'Billing' ? '{!NearbyAccountsFromBillingAddressJson}' : '{!NearbyAccountsFromShippingAddressJson}';
+                    var nearbyAccountList = JSON.parse(nearbyAccountListJson);
+
+                    markerList = [];
+                    infoWindowList = [];
+                    for(var i = 0; i < nearbyAccountList.length; i ++){
+						var nearbyAddress = addressType === 'Billing' ? 
+							new Address(
+				                'Billing',
+								nearbyAccountList[i].account.Id,
+								nearbyAccountList[i].account.Name,
+								nearbyAccountList[i].account.BillingStreet,
+								nearbyAccountList[i].account.BillingCity,
+								nearbyAccountList[i].account.BillingState,
+								nearbyAccountList[i].account.BillingPostalCode,
+								nearbyAccountList[i].account.BillingLatitude,
+								nearbyAccountList[i].account.BillingLongitude
+				            ) :				            
+				            new Address(
+				                'Shipping',
+								nearbyAccountList[i].account.Id,
+								nearbyAccountList[i].account.Name,
+								nearbyAccountList[i].account.ShippingStreet,
+								nearbyAccountList[i].account.ShippingCity,
+								nearbyAccountList[i].account.ShippingState,
+								nearbyAccountList[i].account.ShippingPostalCode,
+								nearbyAccountList[i].account.ShippingLatitude,
+								nearbyAccountList[i].account.ShippingLongitude
+				            );
+				        markerList.push(new google.maps.Marker({
+						    map: map,
+						    position: nearbyAddress.getLatLng(),
+						    label: nearbyAccountList[i].order.toString()
+						}));
+
+				    /*
+				        infoWindowList.push(new google.maps.InfoWindow({
+	                        content: '<div id="content-' + i.toString() + '"><div id="siteNotice-' + i.toString() + '"></div><h1>' + nearbyAddress.getName() + '</h1><p>' + addressType + ' Address: ' + nearbyAddress.getAddress() + '</p></div>'
+	                    }));
+
+						google.maps.event.addListener(markerList[i], 'click', function(){
+	                        infoWindowList[i].open(map, markerList[i]);
+	                    });
+					*/
+                    }
+
+                    setMapResult = true;
+
+                    var accountPanelList = document.getElementsByClassName(addressType + '-address-panel');
+                    for(var i = 0; i < accountPanelList.length; i ++){
+                    	accountPanelList[i].style.display = 'block';
+                    }
+                } else if(address.getIsValidAddress()){
+                	alert('No Latitude or Longitude found for {!Account.Name}.');
+                	/*
+                    addActiveClass(addressType);
+                    geocoder.geocode( {'address': address.getAddress()}, function(results, status){
+                        if(status == google.maps.GeocoderStatus.OK){
+                            address.setLatLng(results[0].geometry.location);
+                            console.log(addressType + ' new LatLng:');
+                            console.log(address.getLatLng());
+                            var mapOptions = {
+                                zoom: 15,
+                                center: address.getLatLng()
+                            };
+                            map = new google.maps.Map(document.getElementById('map-canvas'), mapOptions);
+                            
+                            var infoWindow = new google.maps.InfoWindow({
+                                content: '<div id="content"><div id="siteNotice"></div><h1>' + address.getName() + '</h1><p>' + addressType + ' Address: ' + address.getAddress() + '</p></div>'
+                            });
+            
+                            var marker = new google.maps.Marker({
+                                map: map,
+                                position: address.getLatLng(),
+                                title: address.getName()
+                            });
+            
+                            google.maps.event.addListener(marker, 'click', function(){
+                                infoWindow.open(map, marker);
+                            });
+            
+                            var latitude = address.getLatLng().G;
+                            var longitude = address.getLatLng().K;
+            			
+                        } else {
+                            console.log(addressType + ' Geocode was not successful for the following reason: ' + status);
+                            var m = document.getElementById('map-canvas');
+                            m.innerHTML = 'No valid ' + addressType + ' Address found.  Error: ' + status;
+                            m.style.backgroundColor = 'inherit';   
+                        }
+                    }); 
+            		*/
+                } else {
+                    var m = document.getElementById('map-canvas');
+                    m.innerHTML = 'No valid ' + addressType + ' Address found.';
+                    m.style.backgroundColor = 'inherit';
+                    removeActiveClass(addressType);
+                }
+                console.log('setMapResult: ' + setMapResult);
+            }
+            
+            function addActiveClass(elementId){
+                document.getElementById(elementId).classList.add('btn-active');
+            }
+            
+            function removeActiveClass(elementId){
+                removeElementActiveClass(document.getElementById(elementId));
+            }
+            
+            function removeElementActiveClass(e){
+                e.classList.remove('btn-active');
+            }
+            
+            function removeAllActiveClass(){
+                var allActiveList = document.getElementsByClassName('btn-active');
+                console.log('allActiveListLength: ' + allActiveList.length);
+                for(var i = 0; i < allActiveList.length; i ++){
+                    removeElementActiveClass(allActiveList[i]);
+                }
+            }
+            
+            function hideAllAddressPanels(){
+            	console.log('hiding address panels');
+            	var panelList = document.querySelectorAll('[id$="-address-panel"]');
+            	console.log('panelListLength: ' + panelList.length);
+            	for(var i = 0; i < panelList.length; i ++)
+            		panelList[i].style.display = 'none';
+            }
+
+
+            console.log('loaded...'); 
+
+            console.log('Account.BillingLatitude: {!Account.BillingLatitude}');
+            console.log('Account.BillingLongitude: {!Account.BillingLongitude}');
+            addresses.add(
+                'Billing',
+                '{!Account.Id}',
+                '{!Account.Name}',
+                '{!Account.BillingStreet}',
+                '{!Account.BillingCity}',
+                '{!Account.BillingState}',
+                '{!Account.BillingPostalCode}',
+                '{!Account.BillingLatitude}',
+                '{!Account.BillingLongitude}'
+            ); 
+            
+            addresses.add(
+                'Shipping',
+                '{!Account.Id}',
+                '{!Account.Name}',
+                '{!Account.ShippingStreet}',
+                '{!Account.ShippingCity}',
+                '{!Account.ShippingState}',
+                '{!Account.ShippingPostalCode}',
+                '{!Account.ShippingLatitude}',
+                '{!Account.ShippingLongitude}'
+            );
+
+            console.log('billingIsValid: ' + addresses['Billing'].getIsValid());
+            console.log(addresses['Billing'].getLatLng());
+            console.log('shippingIsValid: ' + addresses['Shipping'].getIsValid());
+            console.log(addresses['Shipping'].getLatLng());
+        </script>
+    </head>
+    <apex:form >
+	    <div id="buttons" style="margin-bottom: 10px;">
+	        <button onclick="setMap('Billing'); return false;" class="btn" id="Billing">Billing Address</button>
+	        <button onclick="setMap('Shipping'); return false;" class="btn" id="Shipping">Shipping Address</button>
+	        <apex:selectList value="{!distance}" size="1" style="margin-left: 5px;">
+	        	<apex:selectOptions value="{!distanceOptionList}"/>
+	        	<apex:actionSupport event="onchange"/>
+	        </apex:selectList>
+	    </div>
+	    <div id="map-canvas">
+	        Choose a Map to display.
+	    </div>
+    </apex:form>
+    <apex:outputPanel style="display: none;" styleClass="Billing-address-panel" id="Billing-address-panel">
+	    <apex:pageBlock title="Nearby Addresses">
+	    	<apex:pageBlockTable value="{!nearbyAccountsFromBillingAddress}" var="nearbyAccount">
+	    		<apex:column headerValue="#" value="{!nearbyAccount.order}"/>
+	    		<apex:column headerValue="Name">
+	    			<apex:outputLink value="/{!nearbyAccount.account.Id}">{!nearbyAccount.account.Name}</apex:outputLink>
+	    		</apex:column>
+	    		<apex:column headerValue="Billing Address" value="{!nearbyAccount.billingAddress}"/> 
+	    	</apex:pageBlockTable>
+	    </apex:pageBlock>
+    </apex:outputPanel>
+    <apex:outputPanel style="display: none;" styleClass="Shipping-address-panel" id="Shipping-address-panel">
+	    <apex:pageBlock title="Nearby Addresses">
+	    	<apex:pageBlockTable value="{!nearbyAccountsFromShippingAddress}" var="nearbyAccount">
+	    		<apex:column headerValue="#" value="{!nearbyAccount.order}"/>
+	    		<apex:column headerValue="Name">
+	    			<apex:outputLink value="/{!nearbyAccount.account.Id}">{!nearbyAccount.account.Name}</apex:outputLink>
+	    		</apex:column>
+	    		<apex:column headerValue="Shipping Address" value="{!nearbyAccount.shippingAddress}"/> 
+	    	</apex:pageBlockTable>
+	    </apex:pageBlock>
+    </apex:outputPanel>
+</apex:page>

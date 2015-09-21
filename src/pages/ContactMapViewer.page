@@ -1,0 +1,48 @@
+<apex:page standardController="Contact">
+    <head>
+       <!-- <meta name="viewport" content="initial-scale=1.0, user-scalable=no"/>  -->
+        <meta charset="utf-8"/>
+        <style>
+          html, body, #map-canvas {
+            height: 100%;
+            margin: 0px;
+            padding: 0px
+          }
+          
+          #map-canvas {
+              height: 200px;
+              width: 100%;
+          }
+        </style>
+        <apex:includeScript value="https://maps.googleapis.com/maps/api/js?v=3.exp"/>
+        <apex:includeScript value="{!URLFOR($Resource.AccountAndContactMapsJs)}"/>
+        <script>
+        	addresses.add(
+                'Mailing',
+                '{!Contact.MailingStreet}',
+                '{!Contact.MailingCity}',
+                '{!Contact.MailingState}',
+                '{!Contact.MailingPostalCode}',
+                '{!Contact.MailingLatitude}',
+                '{!Contact.MailingLongitude}'
+            ); 
+            
+            addresses.add(
+                'Other',
+                '{!Contact.OtherStreet}',
+                '{!Contact.OtherCity}',
+                '{!Contact.OtherState}',
+                '{!Contact.OtherPostalCode}',
+                '{!Contact.OtherLatitude}',
+                '{!Contact.OtherLongitude}'
+            );
+        </script>
+    </head>
+    <div id="buttons" style="margin-bottom: 10px;">
+        <button onclick="setMap('Mailing'); return false;" class="btn">Mailing Address</button>
+        <button onclick="setMap('Other'); return false;" class="btn">Other Address</button>
+    </div>
+    <div id="map-canvas">
+        Choose a Map to display.
+    </div>
+</apex:page>
